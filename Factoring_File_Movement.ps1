@@ -32,29 +32,29 @@ $blobContext  = New-AzStorageContext -StorageAccountName $storageAccountName -Us
 $CL_results = Invoke-Sqlcmd -ServerInstance HEXAR-SQL04 -Database Hex_Armor_ProductionDB  -Query @'
 SELECT
     -- Debtor Information
-    ISNULL(T0.Cardcode,'')                                                       AS "Debtor ID",
-    ISNULL(T0.Cardname,'')                                                       AS "Debtor Name",
-    -- Debtor Country is Type Jdx. (ISO-3166, 2 alpha)
+    '"' + REPLACE(ISNULL(T0.Cardcode,''),'"','""') + '"'                         AS "Debtor ID",
+    '"' + REPLACE(ISNULL(T0.Cardname,''),'"','""') + '"'                         AS "Debtor Name",
+    -- Debtor Country is Type Jdx. (ISO-3166, 2 alpha) -> NOT quoted
     ISNULL(T0.Country,'')                                                        AS "Debtor Country",
     -- NULLIF: empty FatherCard -> NULL so fallback to CardCode fires (fixed ~135 blank Trust IDs)
-    ISNULL(NULLIF(T0.FatherCard,''), T0.CardCode)                               AS "Trust ID",
-    ISNULL((SELECT CardName FROM OCRD WHERE CardCode = NULLIF(T0.FatherCard,'')), T0.CardName) AS "Trust Name",
-    -- Debtor Address
-    ISNULL(T1.StreetNo,'')                                                       AS "Debtor Address 1",
-    ISNULL(T1.Street,'')                                                         AS "Debtor Address 2",
-    ISNULL(T1.Block,'')                                                          AS "Debtor Address 3",
-    ISNULL(T1.Address2,'')                                                       AS "Debtor Address 4",
-    ISNULL(T1.City,'')                                                           AS "Debtor City",
-    ISNULL(T1.ZipCode,'')                                                        AS "Debtor Postal Code",
-    -- Flags: DTD order, defaulted to 'N'
-    'N'                                                                          AS "Intercompany Flag",
-    'N'                                                                          AS "Soletrader Flag",
-    'N'                                                                          AS "Ineligible Debtor Flag",
-    'N'                                                                          AS "Government Debtor Flag",
-    ISNULL(T0.LicTradNum,'')                                                     AS "DUNS-VAT Code",
-    ''                                                                           AS "Supplier ID",
-    CAST(ISNULL(T0.CreditLine, 0) AS VARCHAR(30))                                AS "Debtor Limit Amount",
-    (CASE WHEN ISNULL(T0.Currency,'') = '$' THEN 'USD' ELSE '' END)              AS "Debtor Limit Currency"
+    '"' + REPLACE(ISNULL(NULLIF(T0.FatherCard,''), T0.CardCode),'"','""') + '"'   AS "Trust ID",
+    '"' + REPLACE(ISNULL((SELECT CardName FROM OCRD WHERE CardCode = NULLIF(T0.FatherCard,'')), T0.CardName),'"','""') + '"' AS "Trust Name",
+    -- Debtor Address (all Text -> quoted; City/ZipCode now ISNULL-protected)
+    '"' + REPLACE(ISNULL(T1.StreetNo,''),'"','""') + '"'                         AS "Debtor Address 1",
+    '"' + REPLACE(ISNULL(T1.Street,''),'"','""')   + '"'                         AS "Debtor Address 2",
+    '"' + REPLACE(ISNULL(T1.Block,''),'"','""')    + '"'                         AS "Debtor Address 3",
+    '"' + REPLACE(ISNULL(T1.Address2,''),'"','""') + '"'                         AS "Debtor Address 4",
+    '"' + REPLACE(ISNULL(T1.City,''),'"','""')     + '"'                         AS "Debtor City",
+    '"' + REPLACE(ISNULL(T1.ZipCode,''),'"','""')  + '"'                         AS "Debtor Postal Code",
+    -- Flags: DTD order, defaulted to 'N', quoted
+    '"N"'                                                                        AS "Intercompany Flag",
+    '"N"'                                                                        AS "Soletrader Flag",
+    '"N"'                                                                        AS "Ineligible Debtor Flag",
+    '"N"'                                                                        AS "Government Debtor Flag",
+    '"' + REPLACE(ISNULL(T0.AddId,''),'"','""') + '"'                       AS "DUNS-VAT Code",
+    '""'                                                                         AS "Supplier ID",
+    '"' + CAST(ISNULL(T0.CreditLine, 0) AS VARCHAR(30)) + '"'                    AS "Debtor Limit Amount",
+    '"' + (CASE WHEN ISNULL(T0.Currency,'') = '$' THEN 'USD' ELSE '' END) + '"'  AS "Debtor Limit Currency"
 FROM OCRD T0
 LEFT JOIN CRD1 T1
        ON T0.CardCode = T1.CardCode
@@ -63,6 +63,8 @@ LEFT JOIN CRD1 T1
 WHERE
       T0.validFor = 'Y'
   AND T0.CardType = 'C'
+  --AND LEFT(T0.CardCode, 1) <> 'E'
+  --AND LEFT(T0.CardCode, 6) NOT IN ('C10120', 'C10830', 'C10950', 'C11012', 'C63820');
 '@
 
 $OI_results = Invoke-Sqlcmd -ServerInstance HEXAR-SQL04 -Database Hex_Armor_ProductionDB  -Query @'
@@ -84,7 +86,6 @@ SELECT
 FROM OINV T0
 INNER JOIN OCRD T2 ON T0.CardCode = T2.CardCode
 WHERE T0.DocStatus = 'O' AND T0.CANCELED = 'N' AND (T0.DocTotal - T0.PaidToDate) <> 0
-
 UNION ALL
 -- AR CREDIT MEMOS (NCD / negative)
 SELECT
@@ -104,7 +105,6 @@ SELECT
 FROM ORIN T0
 INNER JOIN OCRD T2 ON T0.CardCode = T2.CardCode
 WHERE T0.DocStatus = 'O' AND T0.CANCELED = 'N' AND (T0.DocTotal - T0.PaidToDate) <> 0
-
 UNION ALL
 -- UNAPPLIED INCOMING PAYMENTS (UNC / negative)
 SELECT
@@ -129,61 +129,59 @@ WHERE T0.CANCELED = 'N' AND T0.OpenBal <> 0;
 $MOV_results = Invoke-Sqlcmd -ServerInstance HEXAR-SQL04 -Database Hex_Armor_ProductionDB  -Query @'
 -- INVOICES (INV) -- new docs since yesterday
 SELECT
-    CAST(T0.DocNum AS VARCHAR(20))                               AS "Item ID",
-    '5290'                                                       AS "Seller Code",
-    ISNULL(T0.CardCode,'')                                       AS "Debtor ID",
+    '"' + CAST(T0.DocNum AS VARCHAR(20)) + '"'                   AS "Item ID",
+    '"5290"'                                                     AS "Seller Code",
+    '"' + REPLACE(ISNULL(T0.CardCode,''),'"','""') + '"'         AS "Debtor ID",
     CONVERT(CHAR(8), T0.DocDate,    112)                         AS "Issue Date",
     CONVERT(CHAR(8), T0.DocDueDate, 112)                         AS "Due Date",
-    'INV'                                                        AS "Item Type",
+    '"INV"'                                                      AS "Item Type",
     'USD'                                                        AS "Item Currency",
     CAST((T0.DocTotal - T0.PaidToDate) AS DECIMAL(19,6))         AS "Amount Outstanding",
     ''                                                           AS "VAT Amount",
-    'O'                                                          AS "Item Status",
-    'N'                                                          AS "Dispute Code",
-    (CASE WHEN ISNULL(T0.Indicator,'') = '' THEN 'N' ELSE 'Y' END) AS "Ineligible Invoice Flag",
+    '"O"'                                                        AS "Item Status",
+    '"N"'                                                        AS "Dispute Code",
+    '"' + (CASE WHEN ISNULL(T0.Indicator,'') = '' THEN 'N' ELSE 'Y' END) + '"' AS "Ineligible Invoice Flag",
     CAST((T0.DocTotal - T0.PaidToDate) AS DECIMAL(19,6))         AS "Amount In Base Currency"
 FROM OINV T0
 INNER JOIN OCRD T2 ON T0.CardCode = T2.CardCode
 WHERE T0.DocStatus = 'O' AND T0.CANCELED = 'N' AND (T0.DocTotal - T0.PaidToDate) <> 0
   AND T0.DocDate >= CAST(GETDATE()-1 AS DATE)
-
 UNION ALL
 -- AR CREDIT MEMOS (NCD / negative)
 SELECT
-    CAST(T0.DocNum AS VARCHAR(20)),
-    '5290',
-    ISNULL(T0.CardCode,''),
+    '"' + CAST(T0.DocNum AS VARCHAR(20)) + '"',
+    '"5290"',
+    '"' + REPLACE(ISNULL(T0.CardCode,''),'"','""') + '"',
     CONVERT(CHAR(8), T0.DocDate,    112),
     CONVERT(CHAR(8), T0.DocDueDate, 112),
-    'NCD',
+    '"NCD"',
     'USD',
     CAST((T0.DocTotal - T0.PaidToDate) * -1 AS DECIMAL(19,6)),
     '',
-    'O',
-    'N',
-    (CASE WHEN ISNULL(T0.Indicator,'') = '' THEN 'N' ELSE 'Y' END),
+    '"O"',
+    '"N"',
+    '"' + (CASE WHEN ISNULL(T0.Indicator,'') = '' THEN 'N' ELSE 'Y' END) + '"',
     CAST((T0.DocTotal - T0.PaidToDate) * -1 AS DECIMAL(19,6))
 FROM ORIN T0
 INNER JOIN OCRD T2 ON T0.CardCode = T2.CardCode
 WHERE T0.DocStatus = 'O' AND T0.CANCELED = 'N' AND (T0.DocTotal - T0.PaidToDate) <> 0
   AND T0.DocDate >= CAST(GETDATE()-1 AS DATE)
-
 UNION ALL
 -- UNAPPLIED INCOMING PAYMENTS (UNC / negative)
 SELECT
-    CAST(T0.DocNum AS VARCHAR(20)),
-    '5290',
-    ISNULL(T0.CardCode,''),
+    '"' + CAST(T0.DocNum AS VARCHAR(20)) + '"',
+    '"5290"',
+    '"' + REPLACE(ISNULL(T0.CardCode,''),'"','""') + '"',
     CONVERT(CHAR(8), T0.DocDate, 112),
     CONVERT(CHAR(8), T0.DocDate, 112),
-    'UNC',
+    '"UNC"',
     'USD',
-    CAST(T0.OpenBal * -1 AS DECIMAL(19,6)),
+    CAST(T0.DocTotal * -1 AS DECIMAL(19,6)),
     '',
-    'O',
-    'N',
-    'N',
-    CAST(T0.OpenBal * -1 AS DECIMAL(19,6))
+    '"O"',
+    '"N"',
+    '"N"',
+    CAST(T0.DocTotal * -1 AS DECIMAL(19,6))
 FROM ORCT T0
 INNER JOIN OCRD T2 ON T0.CardCode = T2.CardCode
 WHERE T0.CANCELED = 'N' AND T0.OpenBal <> 0
@@ -194,7 +192,7 @@ WHERE T0.CANCELED = 'N' AND T0.OpenBal <> 0
 if ($OI_results.Count -gt 0) {
     # Export the OI_results to a CSV file
     $OI_csv = "\\Hexar-file03\hexardfs\Hexarmor Shared\IT\FTP_Test\HEXARMOR_OI_$dateStamp.csv"
-    $OI_results | Export-Csv $OI_csv -NoTypeInformation
+    $OI_results | Export-Csv $OI_csv -NoTypeInformation -Delimiter ';'
     Write-Output "OI CSV file created successfully."
     # Upload the CSV to Azure Blob Storage
     Set-AzStorageBlobContent -File $OI_csv -Container $blobContainer -Blob "$blobPrefix`HEXARMOR_OI_$dateStamp.csv" -Context $blobContext -Force | Out-Null
@@ -213,7 +211,7 @@ if ($OI_results.Count -gt 0) {
 if ($CL_results.Count -gt 0) {
     # Export the CL_results to a CSV file
     $CL_csv = "\\Hexar-file03\hexardfs\Hexarmor Shared\IT\FTP_Test\HEXARMOR_CL_$dateStamp.csv"
-    $CL_results | Export-Csv $CL_csv -NoTypeInformation
+    $CL_results | Export-Csv $CL_csv -NoTypeInformation -Delimiter ';'
     Write-Output "CL CSV file created successfully."
     # Upload the CSV to Azure Blob Storage
     Set-AzStorageBlobContent -File $CL_csv -Container $blobContainer -Blob "$blobPrefix`HEXARMOR_CL_$dateStamp.csv" -Context $blobContext -Force | Out-Null
@@ -232,7 +230,7 @@ if ($CL_results.Count -gt 0) {
 if ($MOV_results.Count -gt 0) {
     # Export the MOV_results to a CSV file
     $MOV_csv = "\\Hexar-file03\hexardfs\Hexarmor Shared\IT\FTP_Test\HEXARMOR_MOV_$dateStamp.csv"
-    $MOV_results | Export-Csv $MOV_csv -NoTypeInformation
+    $MOV_results | Export-Csv $MOV_csv -NoTypeInformation -Delimiter ';'
     Write-Output "MOV CSV file created successfully."
     # Upload the CSV to Azure Blob Storage
     Set-AzStorageBlobContent -File $MOV_csv -Container $blobContainer -Blob "$blobPrefix`HEXARMOR_MOV_$dateStamp.csv" -Context $blobContext -Force | Out-Null
