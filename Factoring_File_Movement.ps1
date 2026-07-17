@@ -1,5 +1,5 @@
 # Define the file path
-$filePath = "\\Hexar-file03\hexardfs\Hexarmor Shared\IT\FTP_Test\"
+$filePath = "\\Hexar-file03\hexardfs\Hexarmor Shared\IT\FTP_Test"
 
 # Today's date stamp for file names (e.g. 20250630)
 $dateStamp = Get-Date -Format "yyyyMMdd"
