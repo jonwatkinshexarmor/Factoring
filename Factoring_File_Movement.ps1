@@ -1,5 +1,5 @@
 # Define the file path
-$filePath = "\\Hexar-file03\hexardfs\Hexarmor Shared\IT\FTP_Test"
+$csv_Path = "\\Hexar-file03\hexardfs\Hexarmor Shared\IT\FTP_Test"
 
 # Today's date stamp for file names (e.g. 20250630)
 $dateStamp = Get-Date -Format "yyyyMMdd"
@@ -29,7 +29,7 @@ $blobContext  = New-AzStorageContext -StorageAccountName $storageAccountName -Us
 # Run the SQL command and store the results in a variable.
 # NOTE: column values are returned raw (unquoted). Export-Csv adds the CSV quoting,
 # so do NOT wrap values in quotes here or fields end up double/triple-quoted.
-$CL_results = Invoke-Sqlcmd -ServerInstance HEXAR-SQL04 -Database Hex_Armor_ProductionDB  -Query @'
+$CL_results = Invoke-Sqlcmd -ServerInstance HEXAR-SQL04 -Database Hex_Armor_ProductionDB -TrustServerCertificate -Query @'
 SELECT
     -- Debtor Information
     ISNULL(T0.Cardcode,'')                                                       AS "Debtor ID",
@@ -67,7 +67,7 @@ WHERE
   --AND LEFT(T0.CardCode, 6) NOT IN ('C10120', 'C10830', 'C10950', 'C11012', 'C63820');
 '@
 
-$OI_results = Invoke-Sqlcmd -ServerInstance HEXAR-SQL04 -Database Hex_Armor_ProductionDB  -Query @'
+$OI_results = Invoke-Sqlcmd -ServerInstance HEXAR-SQL04 -Database Hex_Armor_ProductionDB -TrustServerCertificate -Query @'
 -- INVOICES (INV)
 SELECT
     CAST(T0.DocNum AS VARCHAR(20))                               AS "Item ID",
@@ -126,7 +126,7 @@ INNER JOIN OCRD T2 ON T0.CardCode = T2.CardCode
 WHERE T0.CANCELED = 'N' AND T0.OpenBal <> 0;
 '@
 
-$MOV_results = Invoke-Sqlcmd -ServerInstance HEXAR-SQL04 -Database Hex_Armor_ProductionDB  -Query @'
+$MOV_results = Invoke-Sqlcmd -ServerInstance HEXAR-SQL04 -Database Hex_Armor_ProductionDB -TrustServerCertificate -Query @'
 -- INVOICES (INV) -- new docs since yesterday
 SELECT
     CAST(T0.DocNum AS VARCHAR(20))                              AS "Item ID",
@@ -191,7 +191,7 @@ WHERE T0.CANCELED = 'N' AND T0.OpenBal <> 0
 # Check if there are rows in the OI_results
 if ($OI_results.Count -gt 0) {
     # Export the OI_results to a CSV file
-    $OI_csv = "\\Hexar-file03\hexardfs\Hexarmor Shared\IT\FTP_Test\5290_OI_$dateStamp.csv"
+    $OI_csv = "$csv_path\5290_OI_$dateStamp.csv"
     $OI_results | Export-Csv $OI_csv -NoTypeInformation -Delimiter ';'
     Write-Output "OI CSV file created successfully."
     # Upload the CSV to Azure Blob Storage
@@ -210,7 +210,7 @@ if ($OI_results.Count -gt 0) {
 # Check if there are rows in the CL_results
 if ($CL_results.Count -gt 0) {
     # Export the CL_results to a CSV file
-    $CL_csv = "\\Hexar-file03\hexardfs\Hexarmor Shared\IT\FTP_Test\5290_CL_$dateStamp.csv"
+    $CL_csv = "$csv_path\5290_CL_$dateStamp.csv"
     $CL_results | Export-Csv $CL_csv -NoTypeInformation -Delimiter ';'
     Write-Output "CL CSV file created successfully."
     # Upload the CSV to Azure Blob Storage
@@ -229,7 +229,7 @@ if ($CL_results.Count -gt 0) {
 # Check if there are rows in the MOV_results
 if ($MOV_results.Count -gt 0) {
     # Export the MOV_results to a CSV file
-    $MOV_csv = "\\Hexar-file03\hexardfs\Hexarmor Shared\IT\FTP_Test\5290_MOV_$dateStamp.csv"
+    $MOV_csv = "$csv_path\5290_MOV_$dateStamp.csv"
     $MOV_results | Export-Csv $MOV_csv -NoTypeInformation -Delimiter ';'
     Write-Output "MOV CSV file created successfully."
     # Upload the CSV to Azure Blob Storage
